@@ -17,7 +17,19 @@ public class Bitmap <T extends Comparable<T>> {
     }
 
     public void setValueAt(int xPos, int yPos, T value){
-        pixelList.set(xPos*width + yPos, value);
+        pixelList.set(yPos*width + xPos, value);
+    }
+
+    public T getValueAt(int xPos, int yPos){
+        return pixelList.get(yPos*width + xPos);
+    }
+
+    public int getWidth(){
+        return this.width;
+    }
+
+    public int getHeight(){
+        return this.height;
     }
 
 }

@@ -1,16 +1,16 @@
-import java.util.LinkedList;
-import java.util.Queue;
+import java.io.File;
+import java.io.IOException;
 
 public class Sicpop {
-    private SerialIOConnector sioConnector;
-    private PrintJobHandler iHandler;
-    private PrintingDispatcher pDispatcher;
-
-    private Queue<Instructions> fileQueue;
+    private Printer service;
 
     public Sicpop(){
-        sioConnector = SerialIOConnector.getInstance();
-        iHandler = PrintJobHandler.getInstance();
-        pDispatcher = PrintingDispatcher.getInstance();
+        service = new SicpopPrinter();
+    }
+
+    public void performPrintJob() throws IOException {
+        File fileToPrint = new File("print.pdf");
+        Instructions instr = Instructions.generateInstructions(fileToPrint);
+        this.service.print(instr);
     }
 }

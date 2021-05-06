@@ -1,18 +1,38 @@
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.lang.Double;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
 
 import javax.imageio.ImageIO;
 
-public class Instructions {
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.rendering.ImageType;
+import org.apache.pdfbox.rendering.PDFRenderer;
 
-    private Instructions(PdfFile pdf){
+public class Instructions implements Iterable<Pair<PrintCommands, Integer>> {
+    private List<Pair<PrintCommands, Integer>> cmds;   
 
+    private Instructions(){
+        cmds = new LinkedList<>();
     }
 
-    public static Instructions generateInstructions(PdfFile pdf){
+    private Instructions(File pdf) throws IOException {
+        this();
+        Bitmap<Integer> bmImg = convertColorImageToBitmap(convertPdfToBufferedImage(pdf));
+        this.generateInstructionsFromBitmap(bmImg);
+    }
+
+    public static Instructions generateInstructions(File pdf) throws IOException {
         return new Instructions(pdf);
+    }
+
+    private static BufferedImage convertPdfToBufferedImage(File pdf) throws IOException {
+        PDDocument doc = PDDocument.load(pdf);
+        PDFRenderer rend = new PDFRenderer(doc);
+        if (doc.getNumberOfPages() != 1) throw new RuntimeException("PDF was corrupted in transit; retry printing.");
+        return rend.renderImageWithDPI(0, 96, ImageType.RGB);
     }
 
     private Bitmap<Integer> convertColorImageToBitmap(BufferedImage img){
@@ -20,8 +40,23 @@ public class Instructions {
         Bitmap<Integer> bm = new Bitmap<>(width, height);
         for (int i = 0; i < width; i++)
             for(int j = 0; j < height; j++)
-                bm.setValueAt(i, j, this.convertRgbToDecimalGrayscale(img.getRGB(i, j)));
+                bm.setValueAt(i, j, convertRgbToDecimalGrayscale(img.getRGB(i, j)));
         return bm;
+    }
+
+    private void generateInstructionsFromBitmap(Bitmap<Integer> bm){
+        int width = bm.getWidth(), height = bm.getHeight(); 
+        for (int i = 0; i < height; i++){
+            for(int j = ((i%2==0) ? 0 : width - 1); j != ((i%2==0) ? width : -1); j += (i%2==0) ? 1 : -1){
+                int nozCount = bm.getValueAt(j, i);
+                Pair<PrintCommands, Integer> newCmd = new Pair<>(PrintCommands.ADVANCE, nozCount);
+                if (j == ((i%2==0)? 0 : width - 1)){
+                    newCmd.setFirst(PrintCommands.FEED);
+                }
+                this.cmds.add(newCmd);
+            }
+        }
+        this.cmds.get(0).setFirst(PrintCommands.WAIT); // Don't move on the first dot!
     }
 
     private static int convertGrayscaleToDecimalGrayscale(int grayscale8Bit){
@@ -45,12 +80,6 @@ public class Instructions {
     }
 
     public static void reduceScale(String fileName) throws IOException {
-        /*
-        File in = new File(fileName), 
-            out1 = new File(String.format("%s%x.%s", "FullGray", System.currentTimeMillis(), "png")), 
-            out2 = new File(String.format("%s%x.%s", "SicpopGray", System.currentTimeMillis(), "png")),
-            out3 = new File(String.format("%s%x.%s", "BinaryGray", System.currentTimeMillis(), "png"));
-        */
         File in = new File(fileName), 
             out1 = new File("FullGray.png"), 
             out2 = new File("SicpopGray.png"),
@@ -60,75 +89,23 @@ public class Instructions {
             &&  (out3.exists() ? (out3.delete() && out3.createNewFile()) : out3.createNewFile())){
             BufferedImage   oldBm = ImageIO.read(in), newBm1 = ImageIO.read(in), 
                 newBm2 = ImageIO.read(in), newBm3 = ImageIO.read(in);
-            int threshold = getThresholdWithOtsu(generateOtsuHistogram(oldBm));
             for (int i = 0; i < oldBm.getWidth(); i++){
                 for (int j = 0; j < oldBm.getHeight(); j++){
                     int gray = convertRgbToGrayscale(oldBm.getRGB(i, j));
                     newBm1.setRGB(i, j, (gray*0x10000) + (gray*0x100) + gray);
-                    newBm3.setRGB(i, j, (gray < threshold ? 0xffffff : 0x000000));
                     gray = convertGrayscaleToDecimalGrayscale(gray) * 23;
                     newBm2.setRGB(i, j, (gray*0x10000) + (gray*0x100) + gray);
                 }
             }
             ImageIO.write(newBm1, "png", out1);
             ImageIO.write(newBm2, "png", out2);
-        } else {
-            System.err.println("Oh");
-            System.out.println("Shit");
+            ImageIO.write(newBm3, "png", out3);
         }
     }
 
-    private static int[] generateOtsuHistogram(BufferedImage buffImg){
-        int[] freq = new int[256];
-        for(int i = 0; i < buffImg.getWidth(); i++)
-            for(int j = 0; j < buffImg.getHeight(); j++){ 
-                int val = buffImg.getRGB(i,j);
-                if ((val & 0xff0000)/0x10000 != (val & 0xff) || (val & 0x00ff00)/0x100 != (val & 0xff))
-                    val = convertRgbToDecimalGrayscale(val);
-                else
-                    val &= 0xff;
-                freq[val]++;
-            }
-                
-        return freq;
+    @Override
+    public Iterator<Pair<PrintCommands, Integer>> iterator() {
+        return this.cmds.iterator();
     }
-
-    private static int getThresholdWithOtsu(int[] freq, int numOfPx){
-        int backgroundWeight = 0, foregroundWeight = 0, threshold = 0;
-        float dotSum = 0, backgroundSum = 0, foregroundSum, maximumVariance = 0, 
-            targetVariance, backgroundMean, foregroundMean, preVariance;
-
-        for(int i = 0; i < freq.length; i++) dotSum += i * freq[i];
-
-        for(int i = 0; i < freq.length; i++){
-            backgroundWeight += freq[i];
-            if (backgroundWeight == 0) continue;
-
-            foregroundWeight += (numOfPx - backgroundWeight);
-            if (foregroundWeight == 0) break;
-
-            backgroundSum += i*freq[i];
-            foregroundSum = dotSum - backgroundSum;
-
-            backgroundMean = backgroundSum/backgroundWeight;
-            foregroundMean = foregroundSum/foregroundWeight;
-
-            preVariance = (backgroundMean - foregroundMean) * (backgroundMean - foregroundMean);
-
-            targetVariance = (backgroundWeight * foregroundWeight) * preVariance;
-
-            if (maximumVariance < targetVariance){
-                maximumVariance = targetVariance;
-                threshold = i;
-            }
-        }
-
-        return threshold;
-    }
-
-    private static int getThresholdWithOtsu(int[] freq){
-        int totalPx = 0;
-        for (Integer i : freq) totalPx += i;
-        return getThresholdWithOtsu(freq, totalPx);
-    }
+    
 }
