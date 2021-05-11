@@ -1,13 +1,9 @@
 import java.util.concurrent.atomic.AtomicBoolean;
 import com.pi4j.io.gpio.GpioController;
 import com.pi4j.io.gpio.GpioFactory;
-import com.pi4j.io.gpio.GpioPinDigitalInput;
 import com.pi4j.io.gpio.GpioPinDigitalOutput;
 import com.pi4j.io.gpio.Pin;
-import com.pi4j.io.gpio.PinPullResistance;
 import com.pi4j.io.gpio.RaspiPin;
-import com.pi4j.io.gpio.event.GpioPinDigitalStateChangeEvent;
-import com.pi4j.io.gpio.event.GpioPinListenerDigital;
 
 
 public class SicpopPrinter implements Printer {
@@ -133,7 +129,7 @@ public class SicpopPrinter implements Printer {
         posy = 0;
     }
 
-    private void spray(int numOfNozzles){
+    public void spray(int numOfNozzles){
         int numNoz = (numOfNozzles < 12 ? numOfNozzles : 12);
         for (int i = 0; i < numNoz; i++){
             this.nozzlePins[i].high();

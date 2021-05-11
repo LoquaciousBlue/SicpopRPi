@@ -13,6 +13,7 @@ import org.apache.pdfbox.rendering.PDFRenderer;
 
 public class Instructions implements Iterable<Pair<PrintCommands, Integer>> {
     private List<Pair<PrintCommands, Integer>> cmds;   
+    private static final int partitionFactor = 256/13;
 
     private Instructions(){
         cmds = new LinkedList<>();
@@ -60,7 +61,7 @@ public class Instructions implements Iterable<Pair<PrintCommands, Integer>> {
     }
 
     private static int convertGrayscaleToDecimalGrayscale(int grayscale8Bit){
-        return grayscale8Bit/23;
+        return grayscale8Bit/partitionFactor;
     }
 
     private static int convertRgbToGrayscale(int rgb){
@@ -80,26 +81,14 @@ public class Instructions implements Iterable<Pair<PrintCommands, Integer>> {
     }
 
     public static void reduceScale(String fileName) throws IOException {
-        File in = new File(fileName), 
-            out1 = new File("FullGray.png"), 
-            out2 = new File("SicpopGray.png"),
-            out3 = new File("BinaryGray.png");
-        if (    (out1.exists() ? (out1.delete() && out1.createNewFile()) : out1.createNewFile()) 
-            &&  (out2.exists() ? (out2.delete() && out2.createNewFile()) : out2.createNewFile())
-            &&  (out3.exists() ? (out3.delete() && out3.createNewFile()) : out3.createNewFile())){
-            BufferedImage   oldBm = ImageIO.read(in), newBm1 = ImageIO.read(in), 
-                newBm2 = ImageIO.read(in), newBm3 = ImageIO.read(in);
-            for (int i = 0; i < oldBm.getWidth(); i++){
-                for (int j = 0; j < oldBm.getHeight(); j++){
-                    int gray = convertRgbToGrayscale(oldBm.getRGB(i, j));
-                    newBm1.setRGB(i, j, (gray*0x10000) + (gray*0x100) + gray);
-                    gray = convertGrayscaleToDecimalGrayscale(gray) * 23;
-                    newBm2.setRGB(i, j, (gray*0x10000) + (gray*0x100) + gray);
-                }
+        File in = new File(fileName);
+        BufferedImage imageToPrint = ImageIO.read(in);
+        for (int i = 0; i < 96*3; i++){ // Width
+            for (int j = 0; j < 96*5; j++){ // Height
+                int gray = convertRgbToGrayscale(imageToPrint.getRGB(i, j));
+                gray = convertGrayscaleToDecimalGrayscale(gray) * partitionFactor;
+                imageToPrint.setRGB(i, j, (gray*0x10000) + (gray*0x100) + gray);
             }
-            ImageIO.write(newBm1, "png", out1);
-            ImageIO.write(newBm2, "png", out2);
-            ImageIO.write(newBm3, "png", out3);
         }
     }
 
